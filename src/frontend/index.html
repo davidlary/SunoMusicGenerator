@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SunoMusicGenerator</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎵 SunoMusicGenerator</h1>
+            <p>Transform scientific text into educational songs</p>
+        </header>
+
+        <main>
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="generate">Generate</button>
+                <button class="tab-btn" data-tab="status">Status</button>
+            </div>
+
+            <!-- Generate Tab -->
+            <div id="generate" class="tab-content active">
+                <h2>Generate Song</h2>
+                <form id="generateForm">
+                    <div class="form-group">
+                        <label for="songId">Song ID *</label>
+                        <input type="text" id="songId" placeholder="e.g., 1.16.1" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="title">Title *</label>
+                        <input type="text" id="title" placeholder="Song title" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="narrative">Scientific Narrative *</label>
+                        <textarea id="narrative" rows="10" placeholder="Enter scientific text..." required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="tags">Tags</label>
+                        <input type="text" id="tags" placeholder="educational, rock" value="educational, rock">
+                    </div>
+
+                    <div class="form-group checkbox">
+                        <input type="checkbox" id="forceRegenerate">
+                        <label for="forceRegenerate">Force regeneration</label>
+                    </div>
+
+                    <button type="submit" class="btn-primary">
+                        Generate Full Song
+                    </button>
+                </form>
+
+                <div id="progress" class="progress hidden">
+                    <div class="spinner"></div>
+                    <p id="progressText">Generating...</p>
+                </div>
+
+                <div id="result" class="result hidden">
+                    <h3>✓ Generation Complete!</h3>
+                    <div id="resultContent"></div>
+                </div>
+
+                <div id="error" class="error hidden">
+                    <h3>✗ Error</h3>
+                    <p id="errorMessage"></p>
+                </div>
+            </div>
+
+            <!-- Status Tab -->
+            <div id="status" class="tab-content">
+                <h2>Generation Status</h2>
+                <button id="refreshBtn" class="btn-secondary">Refresh Status</button>
+                <div id="statusContainer">
+                    <p class="loading">Loading...</p>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Powered by Gemini & Suno APIs | <a href="/docs" target="_blank">API Docs</a></p>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

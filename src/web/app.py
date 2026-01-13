@@ -6,9 +6,11 @@ Provides REST API for generating lyrics, audio, and cover art.
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from ..core import get_logger, get_settings
 from .routes import router
@@ -96,10 +98,19 @@ async def health_check() -> HealthResponse:
 app.include_router(router, prefix="/api/v1", tags=["generation"])
 
 
-# Root endpoint
+# Mount static files for frontend
+frontend_dir = Path(__file__).parent.parent / "frontend"
+if frontend_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(frontend_dir)), name="static")
+
+
+# Root endpoint - serve frontend
 @app.get("/", tags=["root"])
 async def root():
-    """Root endpoint with API information."""
+    """Serve frontend application."""
+    frontend_file = frontend_dir / "index.html"
+    if frontend_file.exists():
+        return FileResponse(frontend_file)
     return {
         "name": "SunoMusicGenerator API",
         "version": "1.0.0",
