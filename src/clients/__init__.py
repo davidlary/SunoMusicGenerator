@@ -7,7 +7,9 @@ This module provides clients for interacting with external APIs:
 """
 
 from .gemini_client import GeminiClient
+from .suno_client import SunoClient
 
 __all__ = [
     "GeminiClient",
+    "SunoClient",
 ]
