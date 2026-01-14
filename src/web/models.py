@@ -120,3 +120,76 @@ class HealthResponse(BaseModel):
     """Health check response."""
     status: str = Field(..., description="Health status")
     version: str = Field(..., description="API version")
+
+
+class SourceFile(BaseModel):
+    """Model for a source text file."""
+    song_id: str = Field(..., description="Song identifier")
+    file_path: str = Field(..., description="Absolute path to source file")
+    title: Optional[str] = Field(None, description="Song title if registered")
+    has_lyrics: bool = Field(default=False, description="Has generated lyrics")
+    has_audio: bool = Field(default=False, description="Has generated audio")
+    has_cover: bool = Field(default=False, description="Has generated cover")
+    text_preview: Optional[str] = Field(None, description="First 200 chars of text")
+
+
+class SourceListResponse(BaseModel):
+    """Response model for source file discovery."""
+    sources: List[SourceFile]
+    total_count: int
+
+
+class PromptReadRequest(BaseModel):
+    """Request model for reading a prompt."""
+    prompt_name: str = Field(..., description="Prompt name (EurekaProtocol or CoverArtPrompt)")
+
+
+class PromptReadResponse(BaseModel):
+    """Response model for reading a prompt."""
+    prompt_name: str
+    content: str
+    file_path: str
+
+
+class PromptUpdateRequest(BaseModel):
+    """Request model for updating a prompt."""
+    prompt_name: str = Field(..., description="Prompt name")
+    content: str = Field(..., description="New prompt content")
+
+
+class PromptUpdateResponse(BaseModel):
+    """Response model for prompt update."""
+    prompt_name: str
+    old_version: str = Field(..., description="Previous version file path")
+    new_version: str = Field(..., description="New version file path")
+    timestamp: str = Field(..., description="Update timestamp")
+
+
+class CoverVersion(BaseModel):
+    """Model for a cover art version."""
+    version_id: str = Field(..., description="Version identifier (timestamp or base)")
+    file_path: str = Field(..., description="Path to cover file")
+    is_active: bool = Field(..., description="Is this the active cover")
+    created_at: str = Field(..., description="Creation timestamp")
+    size: int = Field(..., description="File size in bytes")
+
+
+class CoverVersionsResponse(BaseModel):
+    """Response model for cover versions list."""
+    song_id: str
+    versions: List[CoverVersion]
+    total_count: int
+
+
+class CoverPromoteRequest(BaseModel):
+    """Request model for promoting a cover version."""
+    song_id: str = Field(..., description="Song identifier")
+    version_id: str = Field(..., description="Version to promote")
+
+
+class CoverPromoteResponse(BaseModel):
+    """Response model for cover promotion."""
+    song_id: str
+    promoted_version: str
+    new_active_path: str
+    backup_path: Optional[str] = Field(None, description="Backed up previous active")

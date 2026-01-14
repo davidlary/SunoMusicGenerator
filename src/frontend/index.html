@@ -15,64 +15,66 @@
 
         <main>
             <div class="tabs">
-                <button class="tab-btn active" data-tab="generate">Generate</button>
+                <button class="tab-btn active" data-tab="sources">Sources</button>
+                <button class="tab-btn" data-tab="prompts">Prompts</button>
+                <button class="tab-btn" data-tab="covers">Cover Art</button>
                 <button class="tab-btn" data-tab="status">Status</button>
             </div>
 
-            <!-- Generate Tab -->
-            <div id="generate" class="tab-content active">
-                <h2>Generate Song</h2>
-                <form id="generateForm">
-                    <div class="form-group">
-                        <label for="songId">Song ID *</label>
-                        <input type="text" id="songId" placeholder="e.g., 1.16.1" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="title">Title *</label>
-                        <input type="text" id="title" placeholder="Song title" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="narrative">Scientific Narrative *</label>
-                        <textarea id="narrative" rows="10" placeholder="Enter scientific text..." required></textarea>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="tags">Tags</label>
-                        <input type="text" id="tags" placeholder="educational, rock" value="educational, rock">
-                    </div>
-
-                    <div class="form-group checkbox">
-                        <input type="checkbox" id="forceRegenerate">
-                        <label for="forceRegenerate">Force regeneration</label>
-                    </div>
-
-                    <button type="submit" class="btn-primary">
-                        Generate Full Song
-                    </button>
-                </form>
-
-                <div id="progress" class="progress hidden">
-                    <div class="spinner"></div>
-                    <p id="progressText">Generating...</p>
+            <!-- Sources Tab (Main View) -->
+            <div id="sources" class="tab-content active">
+                <div class="tab-header">
+                    <h2>Source Files</h2>
+                    <button id="refreshSourcesBtn" class="btn-secondary">🔄 Refresh</button>
                 </div>
-
-                <div id="result" class="result hidden">
-                    <h3>✓ Generation Complete!</h3>
-                    <div id="resultContent"></div>
+                <div id="sourcesContainer">
+                    <p class="loading">Loading sources...</p>
                 </div>
+            </div>
 
-                <div id="error" class="error hidden">
-                    <h3>✗ Error</h3>
-                    <p id="errorMessage"></p>
+            <!-- Prompts Tab -->
+            <div id="prompts" class="tab-content">
+                <div class="tab-header">
+                    <h2>Prompt Editor</h2>
+                    <div class="prompt-selector">
+                        <label for="promptSelect">Select Prompt:</label>
+                        <select id="promptSelect">
+                            <option value="EurekaProtocol">Eureka Protocol (Lyrics)</option>
+                            <option value="CoverArtPrompt">Cover Art Prompt</option>
+                        </select>
+                        <button id="loadPromptBtn" class="btn-secondary">Load</button>
+                    </div>
+                </div>
+                <div id="promptEditor">
+                    <textarea id="promptContent" rows="25" placeholder="Select a prompt to edit..."></textarea>
+                    <div class="prompt-actions">
+                        <button id="savePromptBtn" class="btn-primary">💾 Save with Timestamp</button>
+                        <span id="promptStatus"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cover Art Versions Tab -->
+            <div id="covers" class="tab-content">
+                <div class="tab-header">
+                    <h2>Cover Art Versions</h2>
+                    <div class="cover-selector">
+                        <label for="coverSongSelect">Select Song:</label>
+                        <select id="coverSongSelect">
+                            <option value="">-- Select a song --</option>
+                        </select>
+                        <button id="loadCoverVersionsBtn" class="btn-secondary">Load Versions</button>
+                    </div>
+                </div>
+                <div id="coverVersionsContainer">
+                    <p class="info-message">Select a song to view cover art versions</p>
                 </div>
             </div>
 
             <!-- Status Tab -->
             <div id="status" class="tab-content">
                 <h2>Generation Status</h2>
-                <button id="refreshBtn" class="btn-secondary">Refresh Status</button>
+                <button id="refreshStatusBtn" class="btn-secondary">🔄 Refresh Status</button>
                 <div id="statusContainer">
                     <p class="loading">Loading...</p>
                 </div>
@@ -82,6 +84,16 @@
         <footer>
             <p>Powered by Gemini & Suno APIs | <a href="/docs" target="_blank">API Docs</a></p>
         </footer>
+    </div>
+
+    <!-- Modal for generation progress -->
+    <div id="progressModal" class="modal">
+        <div class="modal-content">
+            <h3 id="modalTitle">Generating...</h3>
+            <div class="spinner"></div>
+            <p id="modalMessage">Please wait...</p>
+            <div id="modalError" class="error hidden"></div>
+        </div>
     </div>
 
     <script src="/static/app.js"></script>

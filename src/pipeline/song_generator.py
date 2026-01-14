@@ -53,7 +53,7 @@ class SongGenerator:
 
         Args:
             song_id: Song identifier
-            lyrics: Song lyrics
+            lyrics: Song lyrics (empty to auto-read from file)
             title: Song title
             tags: Genre/style tags
             download_formats: Formats to download ("wav", "mp3")
@@ -66,12 +66,30 @@ class SongGenerator:
             SongGenerationError: If generation fails
         """
         try:
+            # Auto-read lyrics from file if not provided
+            if not lyrics or not lyrics.strip():
+                lyrics_file = self.settings.paths.get_song_dir(song_id) / "Lyrics" / f"{song_id}.txt"
+                if not lyrics_file.exists():
+                    raise SongGenerationError(f"Lyrics file not found: {lyrics_file}")
+                with open(lyrics_file, 'r', encoding='utf-8') as f:
+                    lyrics = f.read()
+                logger.info(f"Auto-read lyrics from {lyrics_file}")
+
             # Check if already exists
             if not force_regenerate:
                 existing = self.state_tracker.get_active_audio_directory(song_id)
                 if existing and Path(existing).exists():
                     logger.info(f"Audio already exists for {song_id}")
-                    return {"directory": existing, "regenerated": False}
+                    # Get clip IDs from state
+                    song_state = self.state_tracker.state["songs"].get(song_id, {})
+                    audio_state = song_state.get("audio", {})
+                    clip_ids = audio_state.get("clip_ids", [])
+                    return {
+                        "directory": existing,
+                        "clip_ids": clip_ids,
+                        "files": {},
+                        "regenerated": False
+                    }
 
             # Generate song
             logger.info(f"Generating audio for {song_id}")

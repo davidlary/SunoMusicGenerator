@@ -51,7 +51,7 @@ class CoverGenerator:
 
         Args:
             song_id: Song identifier
-            lyrics: Song lyrics
+            lyrics: Song lyrics (empty to auto-read from file)
             prompt_template_path: Path to cover generation prompt
             force_regenerate: Force regeneration even if cover exists
 
@@ -62,16 +62,30 @@ class CoverGenerator:
             CoverGenerationError: If generation fails
         """
         try:
+            # Auto-read lyrics from file if not provided
+            if not lyrics or not lyrics.strip():
+                lyrics_file = self.settings.paths.get_song_dir(song_id) / "Lyrics" / f"{song_id}.txt"
+                if not lyrics_file.exists():
+                    raise CoverGenerationError(f"Lyrics file not found: {lyrics_file}")
+                with open(lyrics_file, 'r', encoding='utf-8') as f:
+                    lyrics = f.read()
+                logger.info(f"Auto-read lyrics from {lyrics_file}")
+
             # Check if already exists
             if not force_regenerate:
                 existing = self.state_tracker.get_active_cover(song_id)
                 if existing and Path(existing).exists():
                     logger.info(f"Cover art already exists for {song_id}")
-                    return {"path": existing, "regenerated": False}
+                    cover_size = Path(existing).stat().st_size
+                    return {
+                        "path": existing,
+                        "size": cover_size,
+                        "regenerated": False
+                    }
 
             # Load prompt template
             logger.info(f"Generating cover art for {song_id}")
-            with open(prompt_template_path, 'r') as f:
+            with open(prompt_template_path, 'r', encoding='utf-8') as f:
                 prompt_template = f.read()
 
             # Generate cover art

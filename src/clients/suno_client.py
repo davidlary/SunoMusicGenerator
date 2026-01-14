@@ -8,9 +8,10 @@ using Playwright for authentication and session management.
 import json
 import time
 import asyncio
+import threading
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page
+from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page, Playwright
 import requests
 
 from ..core import (
@@ -41,26 +42,34 @@ class SunoClient:
     - Exponential backoff retry logic
     """
 
-    def __init__(self, session_file: Optional[Path] = None):
+    def __init__(self, session_file: Optional[Path] = None, persistent: bool = False):
         """
         Initialize Suno client.
 
         Args:
             session_file: Optional path to session storage file
+            persistent: If True, keep browser open and refresh cookies every 60s
         """
         self.settings = get_settings()
         self.rate_limiter = get_rate_limiter()
         self.session_file = session_file or self.settings.suno.session_file
         self.base_url = self.settings.suno.base_url
+        self.persistent = persistent
 
         self.session: Optional[requests.Session] = None
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
+        self.playwright: Optional[Playwright] = None
+
+        # Persistent browser support
+        self._refresh_thread: Optional[threading.Thread] = None
+        self._stop_refresh = threading.Event()
 
         logger.info(
             "Suno client initialized",
             base_url=self.base_url,
-            session_file=str(self.session_file)
+            session_file=str(self.session_file),
+            persistent=persistent
         )
 
     def authenticate(self, headless: bool = True) -> bool:
@@ -68,6 +77,7 @@ class SunoClient:
         Authenticate with Suno using Playwright.
 
         Opens browser, allows manual login, captures session cookies.
+        If persistent=True, keeps browser open and starts cookie refresh thread.
 
         Args:
             headless: Run browser in headless mode (False for manual login)
@@ -78,60 +88,97 @@ class SunoClient:
         Raises:
             AuthenticationError: If authentication fails
         """
-        logger.info("Starting Suno authentication", headless=headless)
+        logger.info("Starting Suno authentication", headless=headless, persistent=self.persistent)
 
         try:
-            # Check if we have a valid cached session
-            if self._load_session():
+            # Check if we have a valid cached session (and not using persistent browser)
+            if not self.persistent and self._load_session():
                 if self._verify_session():
                     logger.info("Using cached session")
                     return True
                 else:
                     logger.warning("Cached session invalid, re-authenticating")
 
-            # Start Playwright and authenticate
-            with sync_playwright() as playwright:
-                self.browser = playwright.chromium.launch(headless=headless)
-                self.context = self.browser.new_context()
-                page = self.context.new_page()
-
-                # Navigate to Suno
-                logger.info("Navigating to Suno website")
-                page.goto("https://suno.com")
-
-                if not headless:
-                    # Manual login mode
-                    logger.info("Please log in manually in the browser window")
-                    logger.info("Press Enter after logging in...")
-                    input()
-
-                # Wait for authentication
-                page.wait_for_url("**/app/**", timeout=300000)  # 5 min timeout
-
-                # Extract session cookies
+            # If persistent browser is already running, just refresh
+            if self.persistent and self.browser and self.context:
+                logger.info("Refreshing persistent browser session")
                 cookies = self.context.cookies()
-                storage_state = self.context.storage_state()
-
-                # Save session
-                self._save_session(storage_state)
-
-                # Create requests session with cookies
                 self._create_requests_session(cookies)
-
-                logger.info("Authentication successful")
                 return True
+
+            # Start Playwright and authenticate
+            if self.persistent:
+                # Persistent mode: keep playwright and browser open
+                self.playwright = sync_playwright().start()
+                self.browser = self.playwright.chromium.launch(headless=headless)
+                self.context = self.browser.new_context()
+            else:
+                # Non-persistent mode: use context manager
+                with sync_playwright() as playwright:
+                    self.browser = playwright.chromium.launch(headless=headless)
+                    self.context = self.browser.new_context()
+                    return self._do_authentication(headless)
+
+            # Persistent mode continues here
+            result = self._do_authentication(headless)
+
+            if result and self.persistent:
+                # Start cookie refresh thread
+                self._start_cookie_refresh()
+
+            return result
 
         except Exception as e:
             logger.error("Authentication failed", exc_info=True, error=str(e))
+            if not self.persistent:
+                self._cleanup_browser()
             raise AuthenticationError(
                 f"Suno authentication failed: {str(e)}"
             ) from e
 
-        finally:
-            if self.browser:
-                self.browser.close()
-                self.browser = None
-                self.context = None
+    def _do_authentication(self, headless: bool) -> bool:
+        """
+        Perform actual authentication steps.
+
+        Args:
+            headless: Run browser in headless mode
+
+        Returns:
+            True if authentication successful
+        """
+        try:
+            page = self.context.new_page()
+
+            # Navigate to Suno
+            logger.info("Navigating to Suno website")
+            page.goto("https://suno.com")
+
+            if not headless:
+                # Manual login mode
+                logger.info("Please log in manually in the browser window")
+                logger.info("Press Enter after logging in...")
+                input()
+
+            # Wait for authentication
+            page.wait_for_url("**/app/**", timeout=300000)  # 5 min timeout
+
+            # Extract session cookies
+            cookies = self.context.cookies()
+            storage_state = self.context.storage_state()
+
+            # Save session (if not persistent)
+            if not self.persistent:
+                self._save_session(storage_state)
+
+            # Create requests session with cookies
+            self._create_requests_session(cookies)
+
+            logger.info("Authentication successful")
+            return True
+
+        except Exception as e:
+            logger.error("Authentication process failed", exc_info=True)
+            raise
 
     def _load_session(self) -> bool:
         """
@@ -594,10 +641,89 @@ class SunoClient:
             logger.error(f"WAV download failed: {e}", exc_info=True)
             return None
 
+    def _start_cookie_refresh(self):
+        """Start background thread to refresh cookies every 60 seconds."""
+        if self._refresh_thread and self._refresh_thread.is_alive():
+            logger.warning("Cookie refresh thread already running")
+            return
+
+        self._stop_refresh.clear()
+        self._refresh_thread = threading.Thread(target=self._cookie_refresh_loop, daemon=True)
+        self._refresh_thread.start()
+        logger.info("Started cookie refresh thread (60s interval)")
+
+    def _cookie_refresh_loop(self):
+        """Background loop to refresh cookies every 60 seconds."""
+        while not self._stop_refresh.is_set():
+            try:
+                time.sleep(60)  # Wait 60 seconds
+
+                if self._stop_refresh.is_set():
+                    break
+
+                # Refresh cookies from browser context
+                if self.context:
+                    cookies = self.context.cookies()
+                    self._create_requests_session(cookies)
+                    logger.debug("Cookies refreshed from persistent browser")
+
+            except Exception as e:
+                logger.error(f"Cookie refresh failed: {e}", exc_info=True)
+
+    def _cleanup_browser(self):
+        """Clean up browser resources."""
+        if self.context:
+            try:
+                self.context.close()
+            except Exception as e:
+                logger.warning(f"Failed to close browser context: {e}")
+            self.context = None
+
+        if self.browser:
+            try:
+                self.browser.close()
+            except Exception as e:
+                logger.warning(f"Failed to close browser: {e}")
+            self.browser = None
+
+        if self.playwright:
+            try:
+                self.playwright.stop()
+            except Exception as e:
+                logger.warning(f"Failed to stop playwright: {e}")
+            self.playwright = None
+
     def close(self):
         """Close the client and clean up resources."""
+        # Stop cookie refresh thread
+        if self._refresh_thread:
+            self._stop_refresh.set()
+            self._refresh_thread.join(timeout=5)
+            logger.info("Cookie refresh thread stopped")
+
+        # Close requests session
         if self.session:
             self.session.close()
             self.session = None
 
+        # Clean up browser only if not persistent or explicitly closing
+        if self.persistent:
+            logger.info("Persistent browser kept open (call stop_persistent_browser() to close)")
+        else:
+            self._cleanup_browser()
+
         logger.info("Suno client closed")
+
+    def stop_persistent_browser(self):
+        """Stop persistent browser and clean up all resources."""
+        self._stop_refresh.set()
+        if self._refresh_thread:
+            self._refresh_thread.join(timeout=5)
+
+        self._cleanup_browser()
+
+        if self.session:
+            self.session.close()
+            self.session = None
+
+        logger.info("Persistent browser stopped and cleaned up")

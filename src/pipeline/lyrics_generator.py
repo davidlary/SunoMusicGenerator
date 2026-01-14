@@ -51,7 +51,7 @@ class LyricsGenerator:
 
         Args:
             song_id: Song identifier
-            narrative_text: Source scientific narrative
+            narrative_text: Source scientific narrative (empty to auto-read from file)
             prompt_template_path: Path to Eureka Protocol prompt
             force_regenerate: Force regeneration even if lyrics exist
 
@@ -62,16 +62,32 @@ class LyricsGenerator:
             LyricsGenerationError: If generation fails
         """
         try:
+            # Auto-read narrative text from file if not provided
+            if not narrative_text or not narrative_text.strip():
+                text_file = self.settings.paths.get_song_dir(song_id) / "Text" / f"{song_id}.txt"
+                if not text_file.exists():
+                    raise LyricsGenerationError(f"Source text file not found: {text_file}")
+                with open(text_file, 'r', encoding='utf-8') as f:
+                    narrative_text = f.read()
+                logger.info(f"Auto-read narrative text from {text_file}")
+
             # Check if already exists
             if not force_regenerate:
                 existing = self.state_tracker.get_active_lyrics(song_id)
                 if existing and Path(existing).exists():
                     logger.info(f"Lyrics already exist for {song_id}")
-                    return {"path": existing, "regenerated": False}
+                    with open(existing, 'r', encoding='utf-8') as f:
+                        lyrics_content = f.read()
+                    return {
+                        "path": existing,
+                        "lyrics": lyrics_content,
+                        "model": "cached",
+                        "regenerated": False
+                    }
 
             # Load prompt template
             logger.info(f"Generating lyrics for {song_id}")
-            with open(prompt_template_path, 'r') as f:
+            with open(prompt_template_path, 'r', encoding='utf-8') as f:
                 prompt_template = f.read()
 
             # Generate lyrics
